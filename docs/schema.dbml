@@ -1,0 +1,148 @@
+Table roles {
+  id uuid [primary key]
+  name varchar   /// [guest, buyer, owner, admin]
+}
+
+Table users {
+  id uuid [primary key]
+  role_id uuid [ref: > roles.id, not null]
+  photo_profile text    ///data akan disimpan di bucket S3 AWS
+  nama_lengkap varchar
+  email varchar [unique, not null]
+  nomor_telepon varchar [unique]
+  password text
+  alamat varchar
+  tanggal_lahir date
+  jenis_kelamin varchar  /// [laki-laki, perempuan]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp
+
+  indexes {
+    email [unique]
+    nomor_telepon [unique]
+  }
+}
+
+Table properties {
+  id uuid [primary key]
+  user_id uuid [ref: > users.id, not null]
+  judul_iklan varchar
+  slug varchar
+  deskripsi text
+  tipe_transaksi varchar  /// [jual, sewa]
+  tipe_hunian varchar     /// [rumah, apartemen]
+  status_hunian varchar   /// [pending, disetujui, ditolak, terjual, diarsipkan] default: pending
+  harga decimal
+  luas_tanah decimal
+  luas_bangunan decimal
+  jumlah_kamar_tidur integer
+  jumlah_kamar_mandi integer
+  jumlah_lantai integer
+  daya_listrik varchar
+  sertifikat varchar      /// [SHM, HGB, HGU, girik, lainnya]
+  kapasitas_garasi integer
+  latitude float
+  longitude float
+  geom geometry            /// Point, SRID 4326 (PostGIS) - untuk radius search
+  rejection_reason text
+  views integer [default: 0]
+  favorites_count integer [default: 0]
+  inquiries_count integer [default: 0]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp
+
+  indexes {
+    slug [unique]
+    user_id
+    status_hunian
+    tipe_transaksi
+    tipe_hunian
+    geom [type: gist]
+  }
+}
+
+Table property_images {
+  id uuid [primary key]
+  property_id uuid [ref: > properties.id, not null]
+  file text          ///data akan disimpan di bucket S3 AWS
+  is_cover boolean [default: false]
+  display_order integer [default: 0]
+  created_at timestamp
+
+  indexes {
+    property_id
+  }
+}
+
+Table facilities {
+  id uuid [primary key]
+  name varchar
+}
+
+Table property_facility {
+  property_id uuid [ref: > properties.id]
+  facility_id uuid [ref: > facilities.id]
+
+  indexes {
+    (property_id, facility_id) [pk]
+  }
+}
+
+Table favorites {
+  user_id uuid [ref: > users.id]
+  property_id uuid [ref: > properties.id]
+  created_at timestamp
+
+  indexes {
+    (user_id, property_id) [pk]
+  }
+}
+
+Table notifications {
+  id uuid [primary key]
+  user_id uuid [ref: > users.id, not null]
+  property_id uuid [ref: > properties.id]
+  type varchar          /// [submitted, approved, rejected, archived, sold]
+  reason text
+  is_read boolean [default: false]
+  created_at timestamp
+
+  indexes {
+    user_id
+  }
+}
+
+Table conversations {
+  id uuid [primary key]
+  property_id uuid [ref: > properties.id]
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    property_id
+  }
+}
+
+Table conversation_participants {
+  conversation_id uuid [ref: > conversations.id]
+  user_id uuid [ref: > users.id]
+  last_read_at timestamp
+
+  indexes {
+    (conversation_id, user_id) [pk]
+  }
+}
+
+Table messages {
+  id uuid [primary key]
+  conversation_id uuid [ref: > conversations.id, not null]
+  sender_id uuid [ref: > users.id]
+  content text
+  created_at timestamp
+
+  indexes {
+    conversation_id
+  }
+}
