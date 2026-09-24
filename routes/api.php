@@ -55,6 +55,7 @@ Route::prefix('lands')->group(function () {
     Route::get('/',               [LandController::class, 'index']);
     Route::get('/{id}/risk',      [LandController::class, 'getRiskAnalysis']);
     Route::get('/{id}/facilities',[FacilityController::class, 'getNearestFacilities']);
+    Route::get('/{id}/route',     [FacilityController::class, 'route']);
     Route::get('/{id}',           [LandController::class, 'show']);
 
     // Protected

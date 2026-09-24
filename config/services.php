@@ -35,4 +35,11 @@ return [
         ],
     ],
 
+    // Road routing for the property "Route" feature (OpenStreetMap-based OSRM).
+    // The public demo server is fine for development; point this at a
+    // self-hosted OSRM instance for production traffic.
+    'osrm' => [
+        'url' => env('OSRM_URL', 'https://router.project-osrm.org'),
+    ],
+
 ];
