@@ -30,24 +30,57 @@ class FacilityController extends Controller
         END
     ";
 
-    // GET /api/facilities — all public facilities with coordinates (for admin spatial map)
-    public function index(): JsonResponse
+    // GET /api/facilities — public facilities with coordinates.
+    // Optional filters (used by the map's facility layers):
+    //   ?amenity=school,hospital            OSM amenity values
+    //   &min_lat=&max_lat=&min_lng=&max_lng= viewport bbox
+    // Without filters it returns the first 500 (admin spatial map, unchanged).
+    public function index(Request $request): JsonResponse
     {
+        $request->validate([
+            'amenity' => 'nullable|string|max:200',
+            'min_lat' => 'nullable|numeric', 'max_lat' => 'nullable|numeric',
+            'min_lng' => 'nullable|numeric', 'max_lng' => 'nullable|numeric',
+        ]);
+
+        $where = ['geom IS NOT NULL', 'amenity IS NOT NULL'];
+        $bindings = [];
+
+        if ($request->filled('amenity')) {
+            $amenities = array_values(array_filter(array_map('trim', explode(',', $request->amenity))));
+            $where[] = 'amenity IN (' . implode(',', array_fill(0, count($amenities), '?')) . ')';
+            array_push($bindings, ...$amenities);
+        }
+
+        $hasBbox = $request->filled(['min_lat', 'max_lat', 'min_lng', 'max_lng']);
+        if ($hasBbox) {
+            // "&&" uses the spatial index on geom
+            $where[] = 'geom && ST_MakeEnvelope(?, ?, ?, ?, 4326)';
+            array_push($bindings,
+                (float) $request->min_lng, (float) $request->min_lat,
+                (float) $request->max_lng, (float) $request->max_lat
+            );
+        }
+
+        $limit = $request->filled('amenity') || $hasBbox ? 1500 : 500;
+
         $results = DB::select('
             SELECT
                 gid,
                 name,
+                amenity,
                 ' . self::CATEGORY_CASE . ' AS category,
                 ST_Y(geom::geometry) AS latitude,
                 ST_X(geom::geometry) AS longitude
             FROM public_facilities
-            WHERE geom IS NOT NULL AND amenity IS NOT NULL
-            LIMIT 500
-        ');
+            WHERE ' . implode(' AND ', $where) . "
+            LIMIT $limit
+        ", $bindings);
 
         return response()->json(collect($results)->map(fn($row) => [
             'id'       => (string) $row->gid,
             'name'     => $row->name ?: $row->category,
+            'amenity'  => $row->amenity,
             'category' => $row->category,
             'lat'      => (float) $row->latitude,
             'lng'      => (float) $row->longitude,

@@ -16,7 +16,10 @@ class LandController extends Controller
     // GET /api/lands
     public function index(Request $request): JsonResponse
     {
-        $query = Land::with('owner');
+        // Expose the PostGIS point as latitude/longitude so toApiArray() can fill `center`
+        $query = Land::with('owner')->select('lands.*')->selectRaw(
+            'ST_Y(geom::geometry) AS latitude, ST_X(geom::geometry) AS longitude'
+        );
 
         if ($request->has('status')) {
             $query->where('status', $request->status);
