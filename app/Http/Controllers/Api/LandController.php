@@ -8,6 +8,7 @@ use App\Models\Notification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class LandController extends Controller
@@ -202,12 +203,44 @@ class LandController extends Controller
     public function store(Request $request): JsonResponse
     {
         $request->validate([
-            'name'     => 'required|string|max:255',
-            'location' => 'required|string',
+            'name'             => 'required|string|max:255',
+            'location'         => 'required|string',
+            'type'             => 'nullable|in:house,apartment,villa',
+            'landArea'         => 'nullable|string|max:50',
+            'buildingArea'     => 'nullable|string|max:50',
+            'floors'           => 'nullable|integer|min:0',
+            'bedrooms'         => 'nullable|integer|min:0',
+            'bathrooms'        => 'nullable|integer|min:0',
+            'electricity'      => 'nullable|integer|min:0',
+            'certificate'      => 'nullable|string|max:20',
+            'garage'           => 'nullable|string|max:100',
+            'unitFloor'        => 'nullable|integer',
+            'unitType'         => 'nullable|string|max:20',
+            'furnished'        => 'nullable|in:furnished,semi,unfurnished',
+            'facilities'       => 'nullable|array|max:30',
+            'facilities.*'     => 'string|max:50',
+            'images'         => 'nullable|array|max:10',
+            'images.*'         => 'image|max:5120',
+            'certificateImage' => 'nullable|image|max:5120',
         ]);
 
+        $landId = Str::uuid()->toString();
+
+        // Upload property photos (multipart images[]) to the default disk (S3)
+        $imageUrls = [];
+        foreach ($request->file('images', []) as $file) {
+            $path = Storage::putFile("lands/{$landId}", $file);
+            $imageUrls[] = Storage::url($path);
+        }
+
+        $certificateUrl = null;
+        if ($request->hasFile('certificateImage')) {
+            $path = Storage::putFile("lands/{$landId}/certificate", $request->file('certificateImage'));
+            $certificateUrl = Storage::url($path);
+        }
+
         $data = [
-            'id'               => Str::uuid()->toString(),
+            'id'               => $landId,
             'name'             => $request->name,
             'location'         => $request->location,
             'price'            => $request->price,
@@ -216,21 +249,21 @@ class LandController extends Controller
             'status'           => 'Pending',
             'owner_id'         => auth('api')->id(),
             'description'      => $request->description,
-            'image'            => $request->image,
-            'images'           => $request->images ? json_encode($request->images) : null,
+            'image'            => $imageUrls[0] ?? null,
+            'images'           => $imageUrls ? self::toPgArray($imageUrls) : null,
             'floors'           => $request->floors,
             'bedrooms'         => $request->bedrooms,
             'bathrooms'        => $request->bathrooms,
             'electricity'      => $request->electricity,
             'certificate'      => $request->certificate ?? 'SHM',
-            'certificate_image'=> $request->certificateImage,
+            'certificate_image'=> $certificateUrl,
             'garage'           => $request->garage,
             'unit_floor'       => $request->unitFloor,
             'unit_type'        => $request->unitType,
             'furnished'        => $request->furnished,
             'land_area'        => $request->landArea,
             'building_area'    => $request->buildingArea,
-            'facilities'       => $request->facilities ? json_encode($request->facilities) : null,
+            'facilities'       => $request->facilities ? self::toPgArray((array) $request->facilities) : null,
         ];
 
         // Insert with optional geom
@@ -259,7 +292,17 @@ class LandController extends Controller
             'owner_id'      => $owner->id,
         ]);
 
-        return response()->json(['id' => $data['id'], 'status' => 'Pending'], 201);
+        return response()->json(['id' => $data['id'], 'status' => 'Pending', 'images' => $imageUrls], 201);
+    }
+
+    // Build a PostgreSQL TEXT[] literal, e.g. {"a","b"}
+    private static function toPgArray(array $values): string
+    {
+        $escaped = array_map(
+            fn($v) => '"' . str_replace(['\\', '"'], ['\\\\', '\\"'], (string) $v) . '"',
+            $values
+        );
+        return '{' . implode(',', $escaped) . '}';
     }
 
     // PATCH /api/lands/{id}/status  (Admin only)
