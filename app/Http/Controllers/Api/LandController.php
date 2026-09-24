@@ -317,9 +317,24 @@ class LandController extends Controller
         ]);
 
         $land = Land::findOrFail($id);
+        $user = auth('api')->user();
+
+        // Admins moderate everything. An owner may only take their own *live* listing
+        // off the market (Sold / Archived) or put it back (Approved from Sold / Archived).
+        if ($user->user_type !== 'admin') {
+            $isOwner = $land->owner_id === $user->id;
+            $ownerMove =
+                (in_array($request->status, ['Sold', 'Archived'], true) && in_array($land->status, ['Approved', 'Sold', 'Archived'], true)) ||
+                ($request->status === 'Approved' && in_array($land->status, ['Sold', 'Archived'], true));
+
+            if (!$isOwner || !$ownerMove) {
+                return response()->json(['error' => 'Anda tidak berhak mengubah status properti ini'], 403);
+            }
+        }
+
         $land->update([
             'status'           => $request->status,
-            'rejection_reason' => $request->rejectionReason,
+            'rejection_reason' => $request->status === 'Rejected' ? $request->rejectionReason : null,
         ]);
 
         // Create notification for owner

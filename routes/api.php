@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ComplaintController;
 use App\Http\Controllers\Api\ConversationController;
 use App\Http\Controllers\Api\FacilityController;
+use App\Http\Controllers\Api\FavoriteController;
 use App\Http\Controllers\Api\LandController;
 use App\Http\Controllers\Api\LayerController;
 use App\Http\Controllers\Api\MessageController;
@@ -44,6 +45,9 @@ Route::prefix('auth')->group(function () {
 Route::prefix('auth')->middleware('auth:api')->group(function () {
     Route::get('/me',     [AuthController::class, 'me']);
     Route::post('/logout',[AuthController::class, 'logout']);
+    Route::put('/profile',          [AuthController::class, 'updateProfile']);
+    Route::post('/profile/photo',   [AuthController::class, 'uploadPhoto']);
+    Route::delete('/profile/photo', [AuthController::class, 'deletePhoto']);
 });
 
 // =============================================
@@ -63,8 +67,15 @@ Route::prefix('lands')->group(function () {
         Route::post('/',                   [LandController::class, 'store']);
         Route::patch('/{id}/status',       [LandController::class, 'updateStatus']);
         Route::put('/{id}/analytics',      [LandController::class, 'incrementAnalytic']);
+        Route::post('/{id}/favorite',      [FavoriteController::class, 'store']);
+        Route::delete('/{id}/favorite',    [FavoriteController::class, 'destroy']);
     });
 });
+
+// =============================================
+// Favorites (saved properties of the logged-in user)
+// =============================================
+Route::middleware('auth:api')->get('/favorites', [FavoriteController::class, 'index']);
 
 // =============================================
 // Layers (hazard polygon overlays)

@@ -42,6 +42,15 @@ class Conversation extends Model
         return $this->hasMany(Message::class, 'conversation_id');
     }
 
+    /** 'buyer' / 'owner' for a participant of this conversation, null for anyone else. */
+    public function roleOf(?User $user): ?string
+    {
+        if (!$user) return null;
+        if ($this->buyer_id === $user->id) return 'buyer';
+        if ($this->owner_id === $user->id) return 'owner';
+        return null;
+    }
+
     public function toApiArray(): array
     {
         return [

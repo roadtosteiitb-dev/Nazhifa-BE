@@ -33,15 +33,28 @@ class ConversationController extends Controller
     public function getOrCreate(Request $request): JsonResponse
     {
         $request->validate([
-            'propertyId' => 'required|string',
-            'buyerId'    => 'required|string',
-            'ownerId'    => 'required|string',
+            'propertyId' => 'required|uuid',
         ]);
 
+        // The buyer is always the logged-in user and the owner always comes from the
+        // property itself — never trust ids sent by the client.
+        $buyer = auth('api')->user();
+        $land  = Land::find($request->propertyId);
+
+        if (!$land) {
+            return response()->json(['error' => 'Properti tidak ditemukan'], 404);
+        }
+        if (!$land->owner_id) {
+            return response()->json(['error' => 'Properti ini belum memiliki pemilik yang dapat dihubungi'], 422);
+        }
+        if ($land->owner_id === $buyer->id) {
+            return response()->json(['error' => 'Anda tidak dapat mengirim pesan ke properti milik sendiri'], 422);
+        }
+
         $existing = Conversation::with(['property', 'buyer', 'owner'])
-            ->where('property_id', $request->propertyId)
-            ->where('buyer_id',    $request->buyerId)
-            ->where('owner_id',    $request->ownerId)
+            ->where('property_id', $land->id)
+            ->where('buyer_id',    $buyer->id)
+            ->where('owner_id',    $land->owner_id)
             ->first();
 
         if ($existing) {
@@ -51,13 +64,13 @@ class ConversationController extends Controller
         // Create new conversation
         $conv = Conversation::create([
             'id'          => Str::uuid()->toString(),
-            'property_id' => $request->propertyId,
-            'buyer_id'    => $request->buyerId,
-            'owner_id'    => $request->ownerId,
+            'property_id' => $land->id,
+            'buyer_id'    => $buyer->id,
+            'owner_id'    => $land->owner_id,
         ]);
 
         // Increment inquiries_count on the property
-        Land::where('id', $request->propertyId)->increment('inquiries_count');
+        Land::where('id', $land->id)->increment('inquiries_count');
 
         $conv->load(['property', 'buyer', 'owner']);
 
@@ -65,17 +78,22 @@ class ConversationController extends Controller
     }
 
     // PUT /api/conversations/{id}/read
-    public function markRead(Request $request, string $id): JsonResponse
+    public function markRead(string $id): JsonResponse
     {
-        $request->validate(['role' => 'required|in:buyer,owner']);
+        $conv = Conversation::findOrFail($id);
+        $role = $conv->roleOf(auth('api')->user());
+        if (!$role) {
+            return response()->json(['error' => 'Anda bukan peserta percakapan ini'], 403);
+        }
 
-        $field = $request->role === 'buyer' ? 'unread_buyer' : 'unread_owner';
+        $field = $role === 'buyer' ? 'unread_buyer' : 'unread_owner';
 
-        Conversation::where('id', $id)->update([$field => 0]);
+        // Plain query update so updated_at (used to sort the chat list) is not touched
+        Conversation::where('id', $id)->toBase()->update([$field => 0]);
 
-        // Mark messages as read
+        // Mark the other side's messages as read
         \App\Models\Message::where('conversation_id', $id)
-            ->where('sender_role', '!=', $request->role)
+            ->where('sender_role', '!=', $role)
             ->where('status', 'sent')
             ->update(['status' => 'read']);
 

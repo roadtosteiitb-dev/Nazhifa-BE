@@ -77,7 +77,7 @@ class Land extends Model
     // fails TLS hostname verification for every client, RN included.
     // Rewriting to path-style (https://s3.<region>.amazonaws.com/<bucket>/...)
     // points at the exact same object over a hostname the cert actually covers.
-    private static function fixS3Url(?string $url): ?string
+    public static function fixS3Url(?string $url): ?string
     {
         if (!$url) return $url;
 
